@@ -1,0 +1,136 @@
+# ============================================================
+# GitLab CI Pipeline — rsonar example
+# Copy this file to .gitlab-ci.yml in your project root.
+#
+# This pipeline demonstrates all rsonar features:
+# lint, style, coverage, quality gate, report, and trend tracking.
+# ============================================================
+
+image: rocker/r-base:latest
+
+stages:
+  - install
+  - analyze
+  - gate
+  - report
+
+variables:
+  R_LIBS_USER: "$CI_PROJECT_DIR/R/library"
+
+# ---- Cache R packages across jobs ----
+cache:
+  key: r-packages-${CI_COMMIT_REF_SLUG}
+  paths:
+    - R/library
+
+# ---- Install dependencies ----
+install-deps:
+  stage: install
+  script:
+    - mkdir -p $R_LIBS_USER
+    - |
+      R -q -e "
+      pkgs <- c('remotes','lintr','styler','covr','goodpractice',
+                'cli','jsonlite','glue','fs','rlang','withr','testthat')
+      miss <- pkgs[!(pkgs %in% rownames(installed.packages()))]
+      if (length(miss) > 0)
+        install.packages(miss, repos = 'https://cloud.r-project.org',
+                         Ncpus = parallel::detectCores())
+      remotes::install_github('ddotta/rsonar')
+      cat('Installation OK\n')
+      "
+
+# ---- Lint analysis ----
+rsonar-lint:
+  stage: analyze
+  needs: [install-deps]
+  script:
+    - |
+      R -q -e "
+      library(rsonar)
+      res <- sonar_analyse('.', include_coverage = FALSE,
+                                include_goodpractice = FALSE)
+      export_junit(res, 'junit-lint.xml')
+      export_sonar_json(res, 'sonar-issues.json')
+      cat('Lint issues:', res\$metrics\$n_lint_issues, '\n')
+      "
+  artifacts:
+    when: always
+    reports:
+      junit: junit-lint.xml
+    paths:
+      - sonar-issues.json
+    expire_in: 1 week
+
+# ---- Style check ----
+rsonar-style:
+  stage: analyze
+  needs: [install-deps]
+  script:
+    - |
+      R -q -e "
+      library(rsonar)
+      res <- sonar_analyse('.', include_lint = FALSE,
+                                include_coverage = FALSE,
+                                include_goodpractice = FALSE)
+      cat('Style issues:', res\$metrics\$n_style_issues, '\n')
+      "
+
+# ---- Coverage ----
+rsonar-coverage:
+  stage: analyze
+  needs: [install-deps]
+  script:
+    - |
+      R -q -e "
+      library(rsonar)
+      res <- sonar_analyse('.', include_lint = FALSE,
+                                include_style = FALSE,
+                                include_goodpractice = FALSE)
+      pct <- res\$metrics\$coverage_pct
+      cat('Coverage:', pct, '%\n')
+      if (!is.na(pct)) covr::to_cobertura(res\$coverage, 'coverage.xml')
+      "
+  coverage: '/Coverage: ([0-9.]+) %/'
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage.xml
+    expire_in: 1 week
+
+# ---- Quality Gate ----
+rsonar-gate:
+  stage: gate
+  needs: [rsonar-lint, rsonar-style, rsonar-coverage]
+  script:
+    - |
+      R -q -e "
+      library(rsonar)
+      res <- sonar_analyse('.')
+      quality_gate(res,
+        coverage_min     = 30,
+        lint_errors_max  = 50,
+        style_issues_max = 10,
+        rating_min       = 'D',
+        fail_on_error    = TRUE)
+      "
+
+# ---- HTML report + trend tracking ----
+rsonar-report:
+  stage: report
+  needs: [rsonar-gate]
+  script:
+    - |
+      R -q -e "
+      library(rsonar)
+      res <- sonar_analyse('.')
+      sonar_report(res, output = 'rsonar-report.html', open = FALSE)
+      sonar_trend(res, file = 'rsonar-history.json')
+      cat('Report generated. Trend updated.\n')
+      "
+  artifacts:
+    paths:
+      - rsonar-report.html
+      - rsonar-history.json
+    expire_in: 4 weeks

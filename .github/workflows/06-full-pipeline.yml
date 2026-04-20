@@ -1,0 +1,215 @@
+# ============================================================
+# Workflow 6 — Full Production Pipeline
+# Complete CI pipeline with staged jobs: lint, style,
+# coverage, quality gate, report, and SARIF upload.
+# This is the recommended setup for production projects.
+# ============================================================
+name: "Example: Full Pipeline"
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+  security-events: write
+
+jobs:
+  # ---- Stage 1: Lint ----
+  lint:
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y --no-install-recommends \
+            libxml2-dev libcurl4-openssl-dev libssl-dev libgit2-dev
+          Rscript -e "
+          install.packages(c('remotes','lintr','styler','cli','jsonlite',
+                             'glue','fs','rlang','withr'),
+                           repos = 'https://cloud.r-project.org')
+          remotes::install_github('ddotta/rsonar')
+          "
+      - name: Static analysis (lintr)
+        run: |
+          Rscript -e "
+          library(rsonar)
+          res <- sonar_analyse('.', include_style = FALSE,
+                                    include_coverage = FALSE,
+                                    include_goodpractice = FALSE)
+          export_junit(res, 'junit-lint.xml')
+          export_sarif(res, 'rsonar-lint.sarif')
+          cat('Lint errors:', res\$metrics\$n_lint_errors, '\n')
+          "
+      - name: Publish lint (JUnit)
+        if: always()
+        uses: mikepenz/action-junit-report@v5
+        with:
+          report_paths: junit-lint.xml
+          check_name: "Lint Results"
+      - name: Upload SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: rsonar-lint.sarif
+          category: rsonar-lint
+
+  # ---- Stage 2: Style ----
+  style:
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y --no-install-recommends \
+            libxml2-dev libcurl4-openssl-dev libssl-dev libgit2-dev
+          Rscript -e "
+          install.packages(c('remotes','lintr','styler','cli','jsonlite',
+                             'glue','fs','rlang','withr'),
+                           repos = 'https://cloud.r-project.org')
+          remotes::install_github('ddotta/rsonar')
+          "
+      - name: Style check (styler)
+        run: |
+          Rscript -e "
+          library(rsonar)
+          res <- sonar_analyse('.', include_lint = FALSE,
+                                    include_coverage = FALSE,
+                                    include_goodpractice = FALSE)
+          n <- res\$metrics\$n_style_issues
+          cat('Style issues:', n, '\n')
+          if (n > 0) warning(n, ' file(s) not conforming to style guidelines')
+          "
+
+  # ---- Stage 3: Coverage ----
+  coverage:
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y --no-install-recommends \
+            libxml2-dev libcurl4-openssl-dev libssl-dev libgit2-dev
+          Rscript -e "
+          install.packages(c('remotes','lintr','styler','covr','cli',
+                             'jsonlite','glue','fs','rlang','withr','testthat'),
+                           repos = 'https://cloud.r-project.org')
+          remotes::install_github('ddotta/rsonar')
+          "
+      - name: Test coverage (covr)
+        run: |
+          Rscript -e "
+          library(rsonar)
+          res <- sonar_analyse('.', include_lint = FALSE,
+                                    include_style = FALSE,
+                                    include_goodpractice = FALSE)
+          pct <- res\$metrics\$coverage_pct
+          cat('::notice::Coverage:', pct, '%\n')
+          if (!is.na(pct)) covr::to_cobertura(res\$coverage, 'coverage.xml')
+          "
+      - name: Upload coverage
+        if: always()
+        uses: codecov/codecov-action@v5
+        with:
+          files: coverage.xml
+          fail_ci_if_error: false
+
+  # ---- Stage 4: Quality Gate ----
+  gate:
+    needs: [lint, style, coverage]
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y --no-install-recommends \
+            libxml2-dev libcurl4-openssl-dev libssl-dev libgit2-dev
+          Rscript -e "
+          install.packages(c('remotes','lintr','styler','covr','goodpractice',
+                             'cli','jsonlite','glue','fs','rlang','withr',
+                             'testthat'),
+                           repos = 'https://cloud.r-project.org')
+          remotes::install_github('ddotta/rsonar')
+          "
+      - name: Quality Gate
+        run: |
+          Rscript -e "
+          library(rsonar)
+          res <- sonar_analyse('.')
+          quality_gate(res,
+            coverage_min     = 30,
+            lint_errors_max  = 50,
+            style_issues_max = 10,
+            rating_min       = 'D',
+            fail_on_error    = TRUE)
+          "
+
+  # ---- Stage 5: Report ----
+  report:
+    needs: [gate]
+    if: always()
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y --no-install-recommends \
+            libxml2-dev libcurl4-openssl-dev libssl-dev libgit2-dev
+          Rscript -e "
+          install.packages(c('remotes','lintr','styler','covr','goodpractice',
+                             'cli','jsonlite','glue','fs','rlang','withr',
+                             'testthat'),
+                           repos = 'https://cloud.r-project.org')
+          remotes::install_github('ddotta/rsonar')
+          "
+      - name: Generate full report
+        run: |
+          Rscript -e "
+          library(rsonar)
+          res <- sonar_analyse('.')
+          sonar_report(res, output = 'rsonar-report.html', open = FALSE)
+          export_sonar_json(res, 'sonar-issues.json')
+          "
+      - name: Upload report
+        uses: actions/upload-artifact@v4
+        with:
+          name: rsonar-full-report
+          path: |
+            rsonar-report.html
+            sonar-issues.json
+          retention-days: 30

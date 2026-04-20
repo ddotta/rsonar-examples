@@ -1,0 +1,9 @@
+output/
+rsonar-report.html
+rsonar-history.json
+*.xml
+*.sarif
+sonar-issues.json
+.Rhistory
+.Rdata
+.Rproj.user

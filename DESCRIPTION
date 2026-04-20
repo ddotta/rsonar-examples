@@ -1,0 +1,17 @@
+Package: demoutils
+Title: Demo Utility Functions for rsonar Examples
+Version: 0.1.0
+Authors@R:
+    person("Damien Dotta", role = c("aut", "cre"),
+           email = "damien.dotta@live.fr")
+Description: A tiny demonstration package used to showcase rsonar's code
+    quality analysis features. Contains intentionally clean and messy code
+    to illustrate lint detection, style checks, coverage analysis, and
+    technical debt estimation.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.2
+Suggests:
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3

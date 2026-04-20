@@ -1,0 +1,62 @@
+# ============================================================
+# Workflow 3 — SARIF + GitHub Code Scanning
+# Upload lint issues directly into the Security / Code Scanning
+# tab of the GitHub repository.
+# ============================================================
+name: "Example: SARIF Code Scanning"
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  sarif-upload:
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y --no-install-recommends \
+            libxml2-dev libcurl4-openssl-dev libssl-dev libgit2-dev
+
+      - name: Install R dependencies
+        run: |
+          Rscript -e "
+          install.packages(c('remotes','lintr','styler','covr','goodpractice',
+                             'cli','jsonlite','glue','fs','rlang','withr'),
+                           repos = 'https://cloud.r-project.org')
+          remotes::install_github('ddotta/rsonar')
+          "
+
+      - name: Generate SARIF report
+        run: |
+          Rscript -e "
+          library(rsonar)
+          res <- sonar_analyse('.', include_coverage = FALSE,
+                                    include_goodpractice = FALSE)
+          export_sarif(res, 'rsonar-lint.sarif')
+          cat('SARIF file generated with',
+              res\$metrics\$n_lint_issues, 'issue(s)\n')
+          "
+
+      - name: Upload SARIF to GitHub Code Scanning
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: rsonar-lint.sarif
+          category: rsonar
