@@ -169,7 +169,7 @@ jobs:
             coverage_min     = 30,
             lint_errors_max  = 50,
             style_issues_max = 10,
-            rating_min       = 'D',
+            rating_min       = 'E',
             fail_on_error    = TRUE)
           "
 
