@@ -1,8 +1,8 @@
 # rsonar-examples
 
-> Practical examples showcasing [rsonar](https://github.com/ddotta/rsonar) — the SonarQube equivalent for R.
+> Practical examples showcasing [rsonar](https://github.com/ddotta/rsonar) — the SonarQube equivalent for R. Includes automatic code formatting with [air](https://github.com/posit-dev/air).
 
-This repository is a **demo R package** with intentionally clean and messy code, paired with **8 example scripts** and **6 GitHub Actions workflows** to illustrate every feature of the `rsonar` package.
+This repository is a **demo R package** with intentionally clean and messy code, paired with **9 example scripts** and **6 GitHub Actions workflows** to illustrate every feature of the `rsonar` package.
 
 ## Repository structure
 
@@ -20,7 +20,8 @@ rsonar-examples/
 │   ├── 05_selective_analysis.R # Run only lint, style, or coverage individually
 │   ├── 06_diff_comparison.R    # Compare two analyses to detect regressions
 │   ├── 07_trend_tracking.R     # Persist metrics over time to a JSON history
-│   └── 08_project_setup.R      # Use setup helpers (lintr config, CI templates)
+│   ├── 08_project_setup.R      # Use setup helpers (lintr config, CI templates)
+│   └── 09_auto_fix.R           # Auto-format code with air + MR/PR creation
 ├── .github/workflows/          # GitHub Actions CI examples
 │   ├── 01-basic.yml            # Basic analysis + HTML report
 │   ├── 02-quality-gate.yml     # Quality gate that blocks the pipeline
@@ -29,7 +30,7 @@ rsonar-examples/
 │   ├── 05-trend.yml            # Trend tracking with auto-commit
 │   └── 06-full-pipeline.yml    # Full production pipeline (5 parallel stages)
 └── ci-templates/
-    └── gitlab-ci.yml           # GitLab CI equivalent pipeline
+    └── gitlab-ci.yml           # GitLab CI equivalent pipeline with auto-fix
 ```
 
 ## What is rsonar?
@@ -42,6 +43,7 @@ rsonar-examples/
 | [styler](https://styler.r-lib.org/) | Code formatting checks |
 | [covr](https://covr.r-lib.org/) | Test coverage measurement |
 | [goodpractice](https://mangothecat.github.io/goodpractice/) | R package best practices |
+| [air](https://github.com/posit-dev/air) | Automatic code formatting (auto-fix) |
 
 All results are unified into a single analysis object with technical debt estimation (SQALE model), quality gates, and multiple export formats.
 
@@ -131,6 +133,32 @@ use_rsonar_ci("github")     # Copy GitHub Actions workflow
 use_rsonar_ci("gitlab")     # Copy GitLab CI pipeline
 ```
 
+### 9. Auto-fix with air (`09_auto_fix.R`)
+
+Automatically format R code using Posit's `air` formatter:
+
+```r
+library(rsonar)
+
+# Install air (once per machine)
+install_air()
+
+# Check what would be changed (dry-run)
+fix_dry <- sonar_fix(".", dry_run = TRUE)
+print(fix_dry)
+
+# Apply formatting to all R files
+fix <- sonar_fix(".")
+
+# In CI: create a Merge Request with the fixes
+fix <- sonar_fix(".", create_mr = TRUE)
+```
+
+In CI pipelines (`rsonar-fix` job):
+- Installs `air` via `install_air()`
+- Formats all R files automatically
+- Optionally creates a Merge Request (GitLab) or Pull Request (GitHub)
+
 ## CI workflow examples
 
 ### GitHub Actions
@@ -148,6 +176,7 @@ use_rsonar_ci("gitlab")     # Copy GitLab CI pipeline
 
 The `ci-templates/gitlab-ci.yml` file provides a complete pipeline with:
 - Parallel lint/style/coverage jobs
+- **Auto-fix with air** (optional, manual trigger)
 - Quality gate stage
 - HTML report + trend tracking as artifacts
 - Cobertura coverage integration

@@ -3,7 +3,8 @@
 # Copy this file to .gitlab-ci.yml in your project root.
 #
 # This pipeline demonstrates all rsonar features:
-# lint, style, coverage, quality gate, report, and trend tracking.
+# lint, style, auto-fix (air), coverage, quality gate, report,
+# and trend tracking.
 # ============================================================
 
 image: rocker/r-base:latest
@@ -11,6 +12,7 @@ image: rocker/r-base:latest
 stages:
   - install
   - analyze
+  - fix
   - gate
   - report
 
@@ -75,6 +77,27 @@ rsonar-style:
                                 include_goodpractice = FALSE)
       cat('Style issues:', res\$metrics\$n_style_issues, '\n')
       "
+
+# ---- Auto-fix with air (manual trigger) ----
+rsonar-fix:
+  stage: fix
+  needs: [install-deps]
+  when: manual
+  allow_failure: true
+  script:
+    - |
+      R -q -e "rsonar::install_air()"
+      export PATH="$HOME/.local/bin:$PATH"
+      R -q -e "
+      library(rsonar)
+      fix <- sonar_fix('.', dry_run = FALSE)
+      print(fix)
+      writeLines(capture.output(print(fix)), 'rsonar-fix-results.txt')
+      "
+  artifacts:
+    paths:
+      - rsonar-fix-results.txt
+    expire_in: 1 week
 
 # ---- Coverage ----
 rsonar-coverage:
