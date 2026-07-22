@@ -183,7 +183,7 @@ The `ci-templates/gitlab-ci.yml` file provides a complete pipeline with:
 
 ## The demo package
 
-The `demoutils` package contains two files designed to showcase rsonar's detection:
+This package contains two files designed to showcase rsonar's detection:
 
 - **`clean_code.R`** — 3 well-written, documented, and tested functions (`greet`, `fibonacci`, `bmi`)
 - **`messy_code.R`** — 2 intentionally messy functions with:
