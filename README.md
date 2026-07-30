@@ -2,7 +2,7 @@
 
 > Practical examples showcasing [rsonar](https://github.com/ddotta/rsonar) — the SonarQube equivalent for R. Includes automatic code formatting with [air](https://github.com/posit-dev/air).
 
-This repository is a **demo R package** with intentionally clean and messy code, paired with **9 example scripts** and **6 GitHub Actions workflows** to illustrate every feature of the `rsonar` package.
+This repository is a **demo R package** with intentionally clean and messy code, paired with **10 example scripts** and **6 GitHub Actions workflows** to illustrate every feature of the `rsonar` package.
 
 ## Repository structure
 
@@ -21,7 +21,8 @@ rsonar-examples/
 │   ├── 06_diff_comparison.R    # Compare two analyses to detect regressions
 │   ├── 07_trend_tracking.R     # Persist metrics over time to a JSON history
 │   ├── 08_project_setup.R      # Use setup helpers (lintr config, CI templates)
-│   └── 09_auto_fix.R           # Auto-format code with air + MR/PR creation
+│   ├── 09_auto_fix.R           # Auto-format code with air + MR/PR creation
+│   └── 10_hotspots.R           # Rank files by debt to prioritize fixes
 ├── .github/workflows/          # GitHub Actions CI examples
 │   ├── 01-basic.yml            # Basic analysis + HTML report
 │   ├── 02-quality-gate.yml     # Quality gate that blocks the pipeline
@@ -45,7 +46,7 @@ rsonar-examples/
 | [goodpractice](https://mangothecat.github.io/goodpractice/) | R package best practices |
 | [air](https://github.com/posit-dev/air) | Automatic code formatting (auto-fix) |
 
-All results are unified into a single analysis object with technical debt estimation (SQALE model), quality gates, and multiple export formats.
+All results are unified into a single analysis object with technical debt estimation (SQALE model), a per-file **hotspots ranking**, quality gates, and multiple export formats.
 
 ## Quick start
 
@@ -158,6 +159,31 @@ In CI pipelines (`rsonar-fix` job):
 - Installs `air` via `install_air()`
 - Formats all R files automatically
 - Optionally creates a Merge Request (GitLab) or Pull Request (GitHub)
+
+### 10. Hotspots (`10_hotspots.R`)
+
+Rank files by estimated technical debt to know which ones to fix first:
+
+```r
+hotspots <- sonar_hotspots(res, n = 10)
+print(hotspots)
+```
+
+```
+── rsonar Hotspots — Files to Fix First ──────────────────────
+1. R/messy_code.R — 87 min (1 error(s), 2 warning(s), needs re-format, coverage 0%)
+```
+
+`sonar_hotspots()` accepts the same cost arguments as `debt_index()`, so
+you can apply consistent custom weighting across both the global score and
+the per-file ranking:
+
+```r
+sonar_hotspots(res, cost_lint_error = 60, cost_lint_warning = 15)
+```
+
+This ranking is also included automatically in the HTML report generated
+by `sonar_report()`, right after the Technical Debt section.
 
 ## CI workflow examples
 
